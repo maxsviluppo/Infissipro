@@ -53,7 +53,14 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       // STEP 2: AI Analysis
       setStatus('analyzing');
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Access env var directly as string replacement
+      const apiKey = process.env.API_KEY;
+      
+      if (!apiKey) {
+        throw new Error("API Key non configurata. Imposta la variabile d'ambiente API_KEY.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
 
       const responseSchema: Schema = {
         type: Type.OBJECT,
@@ -156,7 +163,11 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
 
     } catch (err: any) {
       console.error("Import failed:", err);
-      setError(err.message || "Errore sconosciuto.");
+      // Clean up error message for display
+      let msg = err.message || "Errore sconosciuto.";
+      if (msg.includes("API Key")) msg = "Errore Configurazione: API Key mancante.";
+      
+      setError(msg);
       setStatus('error');
     }
   };
