@@ -53,10 +53,7 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       // STEP 2: AI Analysis
       setStatus('analyzing');
 
-      const apiKey = process.env.API_KEY;
-      if (!apiKey) throw new Error("API Key mancante.");
-
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
       const responseSchema: Schema = {
         type: Type.OBJECT,
@@ -85,15 +82,16 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       // Using gemini-3-flash-preview as requested for efficient, free-tier compatible testing
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: [
-          {
-            inlineData: {
-              mimeType: 'application/pdf',
-              data: base64Data
-            }
-          },
-          {
-            text: `Analyze this window catalog PDF.
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: base64Data
+              }
+            },
+            {
+              text: `Analyze this window catalog PDF.
             Find the technical data tables (often "ELENCO PROFILI").
             Extract 10-20 main profiles (Frames/Telai and Sashes/Ante).
             
@@ -102,8 +100,9 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
             - description
             - weight (gr/m)
             - type ('frame' if Telaio, 'sash' if Anta, else 'other')`
-          }
-        ],
+            }
+          ]
+        },
         config: {
           responseMimeType: 'application/json',
           responseSchema: responseSchema,
