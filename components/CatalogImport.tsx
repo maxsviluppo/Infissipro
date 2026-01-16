@@ -21,6 +21,7 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
     // Reset logic
     setError(null);
     setFileName(file.name);
+    setStatus('idle');
 
     if (file.type !== 'application/pdf') {
       setError("Il file deve essere un PDF.");
@@ -28,10 +29,10 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       return;
     }
 
-    // Check file size (Reduced to 6MB for safer test uploads)
-    const MAX_SIZE_MB = 6;
+    // Check file size (Increased to 30MB)
+    const MAX_SIZE_MB = 30;
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      setError(`File troppo grande per il test (${(file.size / 1024 / 1024).toFixed(1)}MB). Max: ${MAX_SIZE_MB}MB.`);
+      setError(`File troppo grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Il limite è ${MAX_SIZE_MB}MB.`);
       setStatus('error');
       return;
     }
@@ -44,7 +45,13 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const result = reader.result as string;
-          resolve(result.split(',')[1]);
+          if (!result) {
+              reject(new Error("Lettura file fallita (file vuoto?)"));
+              return;
+          }
+          // Handle cases where result might not include the prefix or be different
+          const parts = result.split(',');
+          resolve(parts.length > 1 ? parts[1] : result);
         };
         reader.onerror = () => reject(new Error("Errore nella lettura del file locale."));
         reader.readAsDataURL(file);
@@ -56,8 +63,10 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       // Access env var directly as string replacement
       const apiKey = process.env.API_KEY;
       
-      if (!apiKey) {
-        throw new Error("API Key non configurata. Imposta la variabile d'ambiente API_KEY.");
+      // Debug check (visible in console)
+      if (!apiKey || apiKey.includes("undefined")) {
+        console.error("API Key mancante o non valida:", apiKey);
+        throw new Error("API Key mancante su Vercel. Controlla le impostazioni del progetto.");
       }
 
       const ai = new GoogleGenAI({ apiKey });
@@ -117,7 +126,7 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       });
 
       const resultText = response.text;
-      if (!resultText) throw new Error("Nessuna risposta dall'IA. Riprova.");
+      if (!resultText) throw new Error("Nessuna risposta dall'IA. Riprova o il PDF potrebbe non essere leggibile.");
 
       const data = JSON.parse(resultText);
       
@@ -126,7 +135,7 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       const COST_PER_KG = 15; 
 
       if (!data.items || data.items.length === 0) {
-          throw new Error("Nessun dato trovato nel PDF.");
+          throw new Error("Nessun dato trovato nel PDF. Assicurati che contenga tabelle tecniche.");
       }
 
       data.items.forEach((item: any) => {
@@ -165,7 +174,9 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
       console.error("Import failed:", err);
       // Clean up error message for display
       let msg = err.message || "Errore sconosciuto.";
-      if (msg.includes("API Key")) msg = "Errore Configurazione: API Key mancante.";
+      if (msg.includes("API Key")) msg = "Errore Configurazione: API Key Vercel mancante.";
+      if (msg.includes("400")) msg = "Errore richiesta AI (400). Il PDF potrebbe essere corrotto o illeggibile.";
+      if (msg.includes("500")) msg = "Errore server AI. Riprova più tardi.";
       
       setError(msg);
       setStatus('error');
@@ -179,14 +190,14 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
             return (
                 <>
                     <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
-                    <span className="text-brand-700">Lettura...</span>
+                    <span className="text-brand-700">Lettura PDF...</span>
                 </>
             );
         case 'analyzing':
             return (
                 <>
                     <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
-                    <span className="text-purple-700">Analisi Gemini Flash...</span>
+                    <span className="text-purple-700">Gemini analizza...</span>
                 </>
             );
         case 'success':
@@ -246,9 +257,9 @@ const CatalogImport: React.FC<CatalogImportProps> = ({ onImportSuccess }) => {
 
        {/* Detailed status message floating below if active */}
        {(status === 'analyzing' || status === 'reading') && (
-         <div className="absolute top-full mt-2 left-0 right-0 text-center">
-             <span className="text-[10px] text-slate-500 bg-white/90 px-2 py-1 rounded shadow-sm border border-slate-100 whitespace-nowrap">
-                {status === 'reading' ? 'Caricamento...' : 'Gemini Flash sta leggendo...'}
+         <div className="absolute top-full mt-2 left-0 right-0 text-center w-full min-w-[150px] -translate-x-1/4 md:translate-x-0">
+             <span className="text-[10px] text-slate-500 bg-white/95 px-3 py-1.5 rounded-lg shadow-lg border border-slate-100 whitespace-nowrap block">
+                {status === 'reading' ? 'Lettura file in corso...' : 'L\'IA sta leggendo il catalogo...'}
              </span>
          </div>
        )}
